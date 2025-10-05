@@ -38,6 +38,9 @@ INSTALLED_APPS = [
     'core',
     'project',
     'subscribe',
+    'mozilla_django_oidc',
+    'corsheaders',
+    'rest_framework',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,12 +52,28 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
+
+LOGIN_URL = '/oidc/login/'
+LOGIN_REDIRECT_URL = "overall/"
+
+# OpenID Connect configuration
+OIDC_RP_CLIENT_ID = "YOUR_CLIENT_ID"        # if you don’t have one, use a demo/test ID
+OIDC_RP_CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+OIDC_OP_AUTHORIZATION_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+OIDC_OP_TOKEN_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+OIDC_OP_USER_ENDPOINT = "https://graph.microsoft.com/oidc/userinfo"
+OIDC_RP_SCOPES = "openid profile email"
 
 ROOT_URLCONF = 'Altera_Telemetry.urls'
 
@@ -83,8 +102,12 @@ WSGI_APPLICATION = 'Altera_Telemetry.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'altera_telemetry',
+        'USER': 'altera_admin',
+        'PASSWORD': getenv('DBPASSWORD'),  
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
