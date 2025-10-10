@@ -36,6 +36,7 @@ ALLOWED_HOSTS = [
 
 INSTALLED_APPS = [
     'core',
+    'coverage',
     'project',
     'subscribe',
     'mozilla_django_oidc',

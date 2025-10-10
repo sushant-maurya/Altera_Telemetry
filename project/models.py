@@ -7,9 +7,11 @@ class ToolBase(models.Model):
     trace_id = models.CharField(max_length=500)
     span_id = models.CharField(max_length=500)
     instance_id = models.CharField(max_length=500)
+    run_id = models.CharField(max_length=500,null=True, blank=True)
     stat_us = models.CharField(max_length=50)
 
     body = models.TextField()
+    platform = models.CharField(max_length=500,null=True, blank=True)
     download_url = models.TextField()
     function_name = models.CharField(max_length=100)
     time_stmp = models.CharField(max_length=100)
@@ -55,5 +57,5 @@ for table_name in available_tool:
     model = type(table_name, (ToolBase,), attrs)
     dynamic_models[table_name] = model
 
-    # Register the model in the app registry
-    apps.register_model('project', model)
+    # # Register the model in the app registry
+    # apps.register_model('project', model)

@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import dynamic_views
+from .views import ToolsList, ProjectsList, SteppingsList, CoverageData
 
-urlpatterns = []
-
-for name, view in dynamic_views.items():
-    url_name = name.lower()
-    urlpatterns.append(path(f'{url_name}/', view.as_view(), name=f'{url_name}-list'))
+urlpatterns = [
+    path("tools/", ToolsList.as_view(), name="tools-list"),
+    path("projects/", ProjectsList.as_view(), name="projects-list"),
+    path("steppings/", SteppingsList.as_view(), name="steppings-list"),
+    path("coverage/", CoverageData.as_view(), name="coverage-data"),
+]
