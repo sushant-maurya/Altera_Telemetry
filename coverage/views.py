@@ -10,3 +10,8 @@ class CoverageViewSet(viewsets.ModelViewSet):
     queryset = Coverage.objects.all()
     serializer_class = CoverageSerializer
     permission_classes = [AllowAny]
+
+
+
+
+

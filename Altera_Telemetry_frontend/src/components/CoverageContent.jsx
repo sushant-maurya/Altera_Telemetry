@@ -13,10 +13,31 @@ export default function CoverageContent({ setActiveContent }) {
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [error, setError] = useState("");
+  const [csvFile, setCsvFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const [filters, setFilters] = useState({
+    event_id: [],
+    event_name: [],
+    event_type: [],
+    ip: [],
+    threshold: [],
+  });
+
+  const [dropdownOpen, setDropdownOpen] = useState({
+    event_id: false,
+    event_name: false,
+    event_type: false,
+    ip: false,
+    threshold: false,
+  });
 
   const API_URL = "http://127.0.0.1:8000/coverage/";
 
-  // Fetch coverage data
+  useEffect(() => {
+    fetchCoverages();
+  }, []);
+
   const fetchCoverages = async () => {
     try {
       const res = await axios.get(API_URL);
@@ -26,30 +47,25 @@ export default function CoverageContent({ setActiveContent }) {
     }
   };
 
-  useEffect(() => {
-    fetchCoverages();
-  }, []);
-
-  // Handle form input change
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Add or update coverage
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(""); // clear previous error
+    setError("");
 
-    // Frontend pre-check for duplicates
     const duplicate = coverages.some(
       (c) =>
         c.event_id.trim().toLowerCase() === formData.event_id.trim().toLowerCase() &&
         c.ip.trim().toLowerCase() === formData.ip.trim().toLowerCase() &&
-        c.id !== editingId // ignore the record being edited
+        c.id !== editingId
     );
 
     if (duplicate) {
-      setError("This event_id + IP combination already exists!");
+      setError(
+        "This Event ID and IP combination already exist. Event ID and IP must be unique"
+      );
       return;
     }
 
@@ -59,6 +75,7 @@ export default function CoverageContent({ setActiveContent }) {
       } else {
         await axios.post(API_URL, formData);
       }
+
       setFormData({
         event_id: "",
         event_name: "",
@@ -72,9 +89,7 @@ export default function CoverageContent({ setActiveContent }) {
       if (err.response && err.response.data.non_field_errors) {
         setError(err.response.data.non_field_errors[0]);
       } else if (err.response && err.response.data) {
-        const messages = Object.values(err.response.data)
-          .flat()
-          .join(" ");
+        const messages = Object.values(err.response.data).flat().join(" ");
         setError(messages);
       } else {
         setError("Something went wrong!");
@@ -82,7 +97,61 @@ export default function CoverageContent({ setActiveContent }) {
     }
   };
 
-  // Delete coverage
+  const handleFileUpload = async (e) => {
+    e.preventDefault();
+    if (!csvFile) {
+      alert("Please select a CSV file first.");
+      return;
+    }
+
+    const uploadData = new FormData();
+    uploadData.append("file", csvFile);
+
+    try {
+      setUploading(true);
+      const response = await axios.post(
+        "http://127.0.0.1:8000/coverage/bulk-upload/",
+        uploadData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      alert(response.data?.message || "CSV uploaded successfully!");
+      setCsvFile(null);
+      e.target.reset();
+      fetchCoverages();
+    } catch (error) {
+      console.error("Upload failed:", error);
+      if (error.response?.data?.error) {
+        alert(`Upload failed: ${error.response.data.error}`);
+      } else {
+        alert("Upload failed. Please check your CSV and try again.");
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await axios.get(
+        "http://127.0.0.1:8000/coverage/template/",
+        { responseType: "blob" }
+      );
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.setAttribute("download", "coverage_template.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error("Template download failed:", error);
+      alert("Failed to download template file.");
+    }
+  };
+
   const handleDelete = async (id) => {
     try {
       await axios.delete(`${API_URL}${id}/`);
@@ -92,7 +161,6 @@ export default function CoverageContent({ setActiveContent }) {
     }
   };
 
-  // Start editing
   const handleEdit = (coverage) => {
     setEditingId(coverage.id);
     setFormData({
@@ -102,15 +170,78 @@ export default function CoverageContent({ setActiveContent }) {
       ip: coverage.ip,
       threshold: coverage.threshold,
     });
-    setError(""); // clear error when editing
+    setError("");
   };
 
-  // Filtered list
-  const filteredCoverages = coverages.filter(
-    (c) =>
+  const getUniqueValues = (key) =>
+    Array.from(new Set(coverages.map((c) => c[key]))).map((val) => val.toString());
+
+  const handleFilterToggle = (key) => {
+    setDropdownOpen({ ...dropdownOpen, [key]: !dropdownOpen[key] });
+  };
+
+  const handleFilterChange = (key, value) => {
+    let newFilters = { ...filters };
+    if (newFilters[key].includes(value)) {
+      newFilters[key] = newFilters[key].filter((v) => v !== value);
+    } else {
+      newFilters[key].push(value);
+    }
+    setFilters(newFilters);
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      event_id: [],
+      event_name: [],
+      event_type: [],
+      ip: [],
+      threshold: [],
+    });
+  };
+
+  const filteredCoverages = coverages.filter((c) => {
+    const matchesSearch =
       c.event_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.event_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.ip.toLowerCase().includes(searchTerm.toLowerCase())
+      c.ip.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesFilters =
+      (filters.event_id.length === 0 || filters.event_id.includes(c.event_id)) &&
+      (filters.event_name.length === 0 || filters.event_name.includes(c.event_name)) &&
+      (filters.event_type.length === 0 || filters.event_type.includes(c.event_type)) &&
+      (filters.ip.length === 0 || filters.ip.includes(c.ip)) &&
+      (filters.threshold.length === 0 || filters.threshold.includes(c.threshold.toString()));
+
+    return matchesSearch && matchesFilters;
+  });
+
+  const renderDropdown = (key) => (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => handleFilterToggle(key)}
+        className="w-full border p-1 mt-1 rounded text-left"
+      >
+        {filters[key].length > 0 ? filters[key].join(", ") : "All"}
+      </button>
+      {dropdownOpen[key] && (
+        <div className="absolute z-10 bg-white border p-2 mt-1 max-h-40 overflow-y-auto w-full shadow-lg">
+          {getUniqueValues(key).map((val) => (
+            <label key={val} className="block">
+              <input
+                type="checkbox"
+                value={val}
+                checked={filters[key].includes(val)}
+                onChange={() => handleFilterChange(key, val)}
+                className="mr-1"
+              />
+              {val}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -125,6 +256,44 @@ export default function CoverageContent({ setActiveContent }) {
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
       />
+
+      {/* Template Download + CSV Upload */}
+      <div className="flex items-center space-x-4 mb-4">
+        <button
+          onClick={handleDownloadTemplate}
+          className="p-2 bg-green-600 text-white rounded"
+        >
+          Download Template
+        </button>
+
+        <form
+          onSubmit={handleFileUpload}
+          encType="multipart/form-data"
+          className="flex items-center space-x-2"
+        >
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => setCsvFile(e.target.files[0])}
+            className="border p-1 rounded"
+            required
+          />
+          <button
+            type="submit"
+            disabled={uploading}
+            className={`p-2 text-white rounded ${uploading ? "bg-gray-400" : "bg-purple-600"}`}
+          >
+            {uploading ? "Uploading..." : "Upload CSV"}
+          </button>
+        </form>
+      </div>
+
+      <button
+        onClick={resetFilters}
+        className="mb-2 p-1 bg-gray-500 text-white rounded"
+      >
+        Reset Filters
+      </button>
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="mb-4 space-y-2">
@@ -193,15 +362,15 @@ export default function CoverageContent({ setActiveContent }) {
         )}
       </form>
 
-      {/* Coverage List */}
+      {/* Coverage Table */}
       <table className="w-full border-collapse border">
         <thead>
           <tr>
-            <th className="border p-2">Event ID</th>
-            <th className="border p-2">Name</th>
-            <th className="border p-2">Type</th>
-            <th className="border p-2">IP</th>
-            <th className="border p-2">Threshold</th>
+            <th className="border p-2">Event ID {renderDropdown("event_id")}</th>
+            <th className="border p-2">Name {renderDropdown("event_name")}</th>
+            <th className="border p-2">Type {renderDropdown("event_type")}</th>
+            <th className="border p-2">IP {renderDropdown("ip")}</th>
+            <th className="border p-2">Threshold {renderDropdown("threshold")}</th>
             <th className="border p-2">Actions</th>
           </tr>
         </thead>
