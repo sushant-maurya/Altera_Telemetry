@@ -5,7 +5,7 @@ import Tool from  './components/Tool.jsx';
 import Subscribe  from './components/Subscribe.jsx';
 import ToolContent from "./components/ToolContent.jsx";
 import Coverage  from "./components/Coverage.jsx";
-import CoverageContent from "./components/CoverageContent.jsx"
+import CoveragePage from "./components/CoveragePage.jsx"
 
 function App() {
   const [activeContent, setActiveContent] = useState("overall");
@@ -39,7 +39,7 @@ function App() {
               <p>This is the content for another panel item.</p>
             </div>
           )}
-          {activeContent === "coverage" && <CoverageContent />
+          {activeContent === "coverage" && <CoveragePage />
             
           }
         </div>

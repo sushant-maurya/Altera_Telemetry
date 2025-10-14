@@ -32,6 +32,9 @@ export default function CoverageContent({ setActiveContent }) {
     threshold: false,
   });
 
+  // 🔹 Sorting state
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+
   const API_URL = "http://127.0.0.1:8000/coverage/";
 
   useEffect(() => {
@@ -97,37 +100,92 @@ export default function CoverageContent({ setActiveContent }) {
     }
   };
 
-  const handleFileUpload = async (e) => {
-    e.preventDefault();
-    if (!csvFile) {
-      alert("Please select a CSV file first.");
-      return;
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // ✅ Improved sorting logic for Event ID
+  const sortedCoverages = [...coverages].sort((a, b) => {
+    if (!sortConfig.key) return 0;
+    const { key, direction } = sortConfig;
+
+    if (key === "event_id") {
+      // extract numeric part from IDs like E1, E12, EVT3 etc.
+      const numA = parseInt(a.event_id.replace(/\D/g, ""), 10);
+      const numB = parseInt(b.event_id.replace(/\D/g, ""), 10);
+
+      // Compare numeric part first, fallback to string if not numbers
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return direction === "asc" ? numA - numB : numB - numA;
+      } else {
+        return direction === "asc"
+          ? a.event_id.localeCompare(b.event_id)
+          : b.event_id.localeCompare(a.event_id);
+      }
     }
 
+    if (key === "event_count") {
+      return direction === "asc"
+        ? a.event_count - b.event_count
+        : b.event_count - a.event_count;
+    }
+
+    // default string or numeric sort
+    const aVal = a[key];
+    const bVal = b[key];
+    if (typeof aVal === "string") {
+      return direction === "asc"
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    } else if (typeof aVal === "number") {
+      return direction === "asc" ? aVal - bVal : bVal - aVal;
+    }
+
+    return 0;
+  });
+
+  // 🔹 Heatmap color
+  const getHeatmapColor = (count, threshold) => {
+    if (threshold === 0) return "rgb(200,200,200)";
+    let ratio = count / threshold;
+    if (ratio < 0) ratio = 0;
+
+    if (ratio <= 1) {
+      const r = 255;
+      const g = Math.round(80 + 175 * ratio);
+      const b = 80;
+      return `rgb(${r},${g},${b})`;
+    }
+
+    const r = Math.round(Math.max(255 - 175 * (ratio - 1), 0));
+    const g = 200;
+    const b = 80;
+    return `rgb(${r},${g},${b})`;
+  };
+
+  const handleFileUpload = async (e) => {
+    e.preventDefault();
+    if (!csvFile) return alert("Please select a CSV file first.");
     const uploadData = new FormData();
     uploadData.append("file", csvFile);
-
     try {
       setUploading(true);
       const response = await axios.post(
         "http://127.0.0.1:8000/coverage/bulk-upload/",
         uploadData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
-
       alert(response.data?.message || "CSV uploaded successfully!");
       setCsvFile(null);
       e.target.reset();
       fetchCoverages();
     } catch (error) {
       console.error("Upload failed:", error);
-      if (error.response?.data?.error) {
-        alert(`Upload failed: ${error.response.data.error}`);
-      } else {
-        alert("Upload failed. Please check your CSV and try again.");
-      }
+      alert("Upload failed. Please check your CSV.");
     } finally {
       setUploading(false);
     }
@@ -146,18 +204,8 @@ export default function CoverageContent({ setActiveContent }) {
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch (error) {
-      console.error("Template download failed:", error);
+    } catch {
       alert("Failed to download template file.");
-    }
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      await axios.delete(`${API_URL}${id}/`);
-      fetchCoverages();
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -170,70 +218,37 @@ export default function CoverageContent({ setActiveContent }) {
       ip: coverage.ip,
       threshold: coverage.threshold,
     });
-    setError("");
   };
 
-  const getUniqueValues = (key) =>
-    Array.from(new Set(coverages.map((c) => c[key]))).map((val) => val.toString());
-
-  const handleFilterToggle = (key) => {
-    setDropdownOpen({ ...dropdownOpen, [key]: !dropdownOpen[key] });
+  const handleDelete = async (id) => {
+    await axios.delete(`${API_URL}${id}/`);
+    fetchCoverages();
   };
-
-  const handleFilterChange = (key, value) => {
-    let newFilters = { ...filters };
-    if (newFilters[key].includes(value)) {
-      newFilters[key] = newFilters[key].filter((v) => v !== value);
-    } else {
-      newFilters[key].push(value);
-    }
-    setFilters(newFilters);
-  };
-
-  const resetFilters = () => {
-    setFilters({
-      event_id: [],
-      event_name: [],
-      event_type: [],
-      ip: [],
-      threshold: [],
-    });
-  };
-
-  const filteredCoverages = coverages.filter((c) => {
-    const matchesSearch =
-      c.event_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.event_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.ip.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesFilters =
-      (filters.event_id.length === 0 || filters.event_id.includes(c.event_id)) &&
-      (filters.event_name.length === 0 || filters.event_name.includes(c.event_name)) &&
-      (filters.event_type.length === 0 || filters.event_type.includes(c.event_type)) &&
-      (filters.ip.length === 0 || filters.ip.includes(c.ip)) &&
-      (filters.threshold.length === 0 || filters.threshold.includes(c.threshold.toString()));
-
-    return matchesSearch && matchesFilters;
-  });
 
   const renderDropdown = (key) => (
     <div className="relative">
       <button
         type="button"
-        onClick={() => handleFilterToggle(key)}
+        onClick={() =>
+          setDropdownOpen({ ...dropdownOpen, [key]: !dropdownOpen[key] })
+        }
         className="w-full border p-1 mt-1 rounded text-left"
       >
         {filters[key].length > 0 ? filters[key].join(", ") : "All"}
       </button>
       {dropdownOpen[key] && (
         <div className="absolute z-10 bg-white border p-2 mt-1 max-h-40 overflow-y-auto w-full shadow-lg">
-          {getUniqueValues(key).map((val) => (
+          {Array.from(new Set(coverages.map((c) => c[key]))).map((val) => (
             <label key={val} className="block">
               <input
                 type="checkbox"
-                value={val}
                 checked={filters[key].includes(val)}
-                onChange={() => handleFilterChange(key, val)}
+                onChange={() => {
+                  const newFilter = filters[key].includes(val)
+                    ? filters[key].filter((v) => v !== val)
+                    : [...filters[key], val];
+                  setFilters({ ...filters, [key]: newFilter });
+                }}
                 className="mr-1"
               />
               {val}
@@ -246,7 +261,7 @@ export default function CoverageContent({ setActiveContent }) {
 
   return (
     <div className="p-4">
-      <h2 className="text-xl font-bold mb-4">Coverage List</h2>
+      
 
       {/* Search */}
       <input
@@ -257,7 +272,6 @@ export default function CoverageContent({ setActiveContent }) {
         onChange={(e) => setSearchTerm(e.target.value)}
       />
 
-      {/* Template Download + CSV Upload */}
       <div className="flex items-center space-x-4 mb-4">
         <button
           onClick={handleDownloadTemplate}
@@ -281,7 +295,9 @@ export default function CoverageContent({ setActiveContent }) {
           <button
             type="submit"
             disabled={uploading}
-            className={`p-2 text-white rounded ${uploading ? "bg-gray-400" : "bg-purple-600"}`}
+            className={`p-2 text-white rounded ${
+              uploading ? "bg-gray-400" : "bg-purple-600"
+            }`}
           >
             {uploading ? "Uploading..." : "Upload CSV"}
           </button>
@@ -289,13 +305,20 @@ export default function CoverageContent({ setActiveContent }) {
       </div>
 
       <button
-        onClick={resetFilters}
+        onClick={() =>
+          setFilters({
+            event_id: [],
+            event_name: [],
+            event_type: [],
+            ip: [],
+            threshold: [],
+          })
+        }
         className="mb-2 p-1 bg-gray-500 text-white rounded"
       >
         Reset Filters
       </button>
-
-      {/* Form */}
+       {/* Form */}
       <form onSubmit={handleSubmit} className="mb-4 space-y-2">
         {error && <div className="text-red-500">{error}</div>}
         <input
@@ -361,26 +384,58 @@ export default function CoverageContent({ setActiveContent }) {
           </button>
         )}
       </form>
-
-      {/* Coverage Table */}
+      {/* Table */}
       <table className="w-full border-collapse border">
         <thead>
           <tr>
-            <th className="border p-2">Event ID {renderDropdown("event_id")}</th>
+            <th
+              className="border p-2 cursor-pointer"
+              onClick={() => handleSort("event_id")}
+            >
+              Event ID{" "}
+              {sortConfig.key === "event_id"
+                ? sortConfig.direction === "asc"
+                  ? "↑"
+                  : "↓"
+                : ""}
+              {renderDropdown("event_id")}
+            </th>
             <th className="border p-2">Name {renderDropdown("event_name")}</th>
             <th className="border p-2">Type {renderDropdown("event_type")}</th>
             <th className="border p-2">IP {renderDropdown("ip")}</th>
-            <th className="border p-2">Threshold {renderDropdown("threshold")}</th>
+            <th
+              className="border p-2 cursor-pointer"
+              onClick={() => handleSort("event_count")}
+            >
+              Hit Count{" "}
+              {sortConfig.key === "event_count"
+                ? sortConfig.direction === "asc"
+                  ? "↑"
+                  : "↓"
+                : ""}
+            </th>
+            <th className="border p-2">
+              Threshold {renderDropdown("threshold")}
+            </th>
             <th className="border p-2">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {filteredCoverages.map((c) => (
+          {sortedCoverages.map((c) => (
             <tr key={c.id}>
               <td className="border p-2">{c.event_id}</td>
               <td className="border p-2">{c.event_name}</td>
               <td className="border p-2">{c.event_type}</td>
               <td className="border p-2">{c.ip}</td>
+              <td
+                className="border p-2 font-semibold text-center"
+                style={{
+                  backgroundColor: getHeatmapColor(c.event_count, c.threshold),
+                  color: "#fff",
+                }}
+              >
+                {c.event_count}
+              </td>
               <td className="border p-2">{c.threshold}</td>
               <td className="border p-2 space-x-2">
                 <button
@@ -398,9 +453,9 @@ export default function CoverageContent({ setActiveContent }) {
               </td>
             </tr>
           ))}
-          {filteredCoverages.length === 0 && (
+          {sortedCoverages.length === 0 && (
             <tr>
-              <td colSpan={6} className="text-center p-2">
+              <td colSpan={7} className="text-center p-2">
                 No records found
               </td>
             </tr>

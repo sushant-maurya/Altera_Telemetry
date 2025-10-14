@@ -12,3 +12,15 @@ class Coverage(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['event_id' ,'ip'], name = "combined_primary_key")
         ]
+
+
+class CoverageMapping(models.Model):
+    ip = models.CharField(max_length=100)
+    coverage_id = models.CharField(max_length=100)
+    coverage_mapping = models.TextField()
+
+    class Meta:
+        constraints = [
+            models. UniqueConstraint(fields = ['coverage_id' , 'ip'] , name = "combined_primary")
+        ]
+        

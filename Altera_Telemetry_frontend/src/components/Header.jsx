@@ -22,7 +22,7 @@ export default function Header() {
       <div className="relative flex items-center justify-between h-full px-6">
         {/* Center: Title */}
         <h1 className="text-white font-bold text-2xl md:text-3xl mx-auto">
-          ALTERA TELEMETRY
+          ALTERA TELEMETRY SERVICE
         </h1>
 
         {/* Right: Logged-in user */}
