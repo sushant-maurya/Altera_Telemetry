@@ -97,7 +97,57 @@ class CoverageMappingBulkUpload(APIView):
             import traceback
             print("⚠️ Excel upload failed:", traceback.format_exc())
             return Response({"error": str(e)}, status=400)
+        
 
+class UniqueIPView(APIView):
+    def get(self, request):
+        ip = list(CoverageMapping.objects.values_list("ip", flat=True).distinct())
+        return Response({"ip": ip})
+    
+class CoverageIndicatorView(APIView):
+    def get(self, request):
+        selected_ip = request.query_params.get("ip")
+        if not selected_ip:
+            return Response({"error": "Missing IP parameter"}, status=400)
+
+        # Step 1: Compute dynamic hit counts from all dynamic models
+        event_counts = {}
+        for model_name, model in dynamic_models.items():
+            # Only consider rows matching the selected IP if model has IP field
+            qs = model.objects.all()
+            if hasattr(model, "ip"):
+                qs = qs.filter(ip=selected_ip)
+            for eid in qs.values_list("eventid", flat=True):
+                if eid:
+                    event_counts[eid] = event_counts.get(eid, 0) + 1
+
+        # Step 2: Fetch CoverageMapping for selected IP
+        mappings = CoverageMapping.objects.filter(ip=selected_ip)
+        data = []
+
+        for mapping in mappings:
+            coverage_id = mapping.coverage_id
+            # Assume mapping.coverage_mapping is comma-separated event_ids
+            events_list = [e.strip() for e in mapping.coverage_mapping.split(",") if e.strip()]
+            event_data = []
+
+            for event_id in events_list:
+                # Fetch Coverage row for event_id and selected_ip
+                coverage_event = Coverage.objects.filter(event_id=event_id, ip=selected_ip).first()
+                threshold = coverage_event.threshold if coverage_event else 0
+                hit = event_counts.get(event_id, 0)  # dynamic calculation
+                event_data.append({
+                    "event_id": event_id,
+                    "hit": hit,
+                    "threshold": threshold
+                })
+
+            data.append({
+                "coverage_id": coverage_id,
+                "events": event_data
+            })
+
+        return Response(data)
 
 
 

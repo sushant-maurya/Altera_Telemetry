@@ -32,7 +32,6 @@ export default function CoverageContent({ setActiveContent }) {
     threshold: false,
   });
 
-  // 🔹 Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
 
   const API_URL = "http://127.0.0.1:8000/coverage/";
@@ -66,9 +65,7 @@ export default function CoverageContent({ setActiveContent }) {
     );
 
     if (duplicate) {
-      setError(
-        "This Event ID and IP combination already exist. Event ID and IP must be unique"
-      );
+      setError("This Event ID and IP combination already exists.");
       return;
     }
 
@@ -108,17 +105,29 @@ export default function CoverageContent({ setActiveContent }) {
     setSortConfig({ key, direction });
   };
 
-  // ✅ Improved sorting logic for Event ID
-  const sortedCoverages = [...coverages].sort((a, b) => {
+  // 🔹 Apply search + filters before sorting
+  const filteredCoverages = coverages.filter((c) => {
+    const matchesSearch = Object.values(c)
+      .some((val) =>
+        val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+    const matchesFilters = Object.keys(filters).every((key) => {
+      if (filters[key].length === 0) return true;
+      return filters[key].includes(c[key]);
+    });
+
+    return matchesSearch && matchesFilters;
+  });
+
+  // 🔹 Sort filtered data
+  const sortedCoverages = [...filteredCoverages].sort((a, b) => {
     if (!sortConfig.key) return 0;
     const { key, direction } = sortConfig;
 
     if (key === "event_id") {
-      // extract numeric part from IDs like E1, E12, EVT3 etc.
       const numA = parseInt(a.event_id.replace(/\D/g, ""), 10);
       const numB = parseInt(b.event_id.replace(/\D/g, ""), 10);
-
-      // Compare numeric part first, fallback to string if not numbers
       if (!isNaN(numA) && !isNaN(numB)) {
         return direction === "asc" ? numA - numB : numB - numA;
       } else {
@@ -134,7 +143,6 @@ export default function CoverageContent({ setActiveContent }) {
         : b.event_count - a.event_count;
     }
 
-    // default string or numeric sort
     const aVal = a[key];
     const bVal = b[key];
     if (typeof aVal === "string") {
@@ -148,7 +156,6 @@ export default function CoverageContent({ setActiveContent }) {
     return 0;
   });
 
-  // 🔹 Heatmap color
   const getHeatmapColor = (count, threshold) => {
     if (threshold === 0) return "rgb(200,200,200)";
     let ratio = count / threshold;
@@ -261,17 +268,16 @@ export default function CoverageContent({ setActiveContent }) {
 
   return (
     <div className="p-4">
-      
-
       {/* Search */}
       <input
         type="text"
         placeholder="Search..."
-        className="mb-4 p-2 border rounded"
+        className="mb-4 p-2 border rounded w-full"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
       />
 
+      {/* Template + Upload */}
       <div className="flex items-center space-x-4 mb-4">
         <button
           onClick={handleDownloadTemplate}
@@ -304,6 +310,7 @@ export default function CoverageContent({ setActiveContent }) {
         </form>
       </div>
 
+      {/* Reset Filters */}
       <button
         onClick={() =>
           setFilters({
@@ -318,49 +325,15 @@ export default function CoverageContent({ setActiveContent }) {
       >
         Reset Filters
       </button>
-       {/* Form */}
+
+      {/* Form */}
       <form onSubmit={handleSubmit} className="mb-4 space-y-2">
         {error && <div className="text-red-500">{error}</div>}
-        <input
-          type="text"
-          name="event_id"
-          placeholder="Event ID"
-          value={formData.event_id}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="event_name"
-          placeholder="Event Name"
-          value={formData.event_name}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="event_type"
-          placeholder="Event Type"
-          value={formData.event_type}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="ip"
-          placeholder="IP"
-          value={formData.ip}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="number"
-          name="threshold"
-          placeholder="Threshold"
-          value={formData.threshold}
-          onChange={handleChange}
-          required
-        />
+        <input type="text" name="event_id" placeholder="Event ID" value={formData.event_id} onChange={handleChange} required />
+        <input type="text" name="event_name" placeholder="Event Name" value={formData.event_name} onChange={handleChange} required />
+        <input type="text" name="event_type" placeholder="Event Type" value={formData.event_type} onChange={handleChange} required />
+        <input type="text" name="ip" placeholder="IP" value={formData.ip} onChange={handleChange} required />
+        <input type="number" name="threshold" placeholder="Threshold" value={formData.threshold} onChange={handleChange} required />
         <button type="submit" className="p-2 bg-blue-700 text-white rounded">
           {editingId ? "Update" : "Add"}
         </button>
@@ -384,39 +357,22 @@ export default function CoverageContent({ setActiveContent }) {
           </button>
         )}
       </form>
+
       {/* Table */}
       <table className="w-full border-collapse border">
         <thead>
           <tr>
-            <th
-              className="border p-2 cursor-pointer"
-              onClick={() => handleSort("event_id")}
-            >
-              Event ID{" "}
-              {sortConfig.key === "event_id"
-                ? sortConfig.direction === "asc"
-                  ? "↑"
-                  : "↓"
-                : ""}
+            <th className="border p-2 cursor-pointer" onClick={() => handleSort("event_id")}>
+              Event ID {sortConfig.key === "event_id" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
               {renderDropdown("event_id")}
             </th>
             <th className="border p-2">Name {renderDropdown("event_name")}</th>
             <th className="border p-2">Type {renderDropdown("event_type")}</th>
             <th className="border p-2">IP {renderDropdown("ip")}</th>
-            <th
-              className="border p-2 cursor-pointer"
-              onClick={() => handleSort("event_count")}
-            >
-              Hit Count{" "}
-              {sortConfig.key === "event_count"
-                ? sortConfig.direction === "asc"
-                  ? "↑"
-                  : "↓"
-                : ""}
+            <th className="border p-2 cursor-pointer" onClick={() => handleSort("event_count")}>
+              Hit Count {sortConfig.key === "event_count" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
             </th>
-            <th className="border p-2">
-              Threshold {renderDropdown("threshold")}
-            </th>
+            <th className="border p-2">Threshold {renderDropdown("threshold")}</th>
             <th className="border p-2">Actions</th>
           </tr>
         </thead>
