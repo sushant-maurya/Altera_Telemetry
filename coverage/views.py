@@ -9,6 +9,7 @@ import pandas as pd
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
+
 from project.models import dynamic_models
 
 # Create your views here.
@@ -26,14 +27,32 @@ class CoverageViewSet(viewsets.ModelViewSet):
         # Compute counts for each event_id from all dynamic tool tables
         event_counts = {}
         for model_name, model in dynamic_models.items():
-            for eid in model.objects.values_list('eventid', flat=True):
-                if eid:
-                    event_counts[eid] = event_counts.get(eid, 0) + 1
+            # Try to detect the correct field names
+            model_fields = [f.name for f in model._meta.fields]
+            eid_field = "eventid" if "eventid" in model_fields else "event_id"
+            ip_field = "ip" if "ip" in model_fields else None
+
+            if not ip_field:
+                print(f"Model {model_name} has no 'ip' field, skipping")
+                continue
+
+            # Iterate all rows
+            for obj in model.objects.values(eid_field, ip_field):
+                eid = obj.get(eid_field)
+                ip = obj.get(ip_field)
+                if eid and ip:
+                    key = (eid, ip)
+                    event_counts[key] = event_counts.get(key, 0) + 1
+
+        # Print the counts for verification
+        for (eid, ip), count in event_counts.items():
+            print(f"Event: {eid}, IP: {ip}, Count: {count}")
 
         # Attach count to each coverage record
         enriched_data = []
         for row in data:
-            row['event_count'] = event_counts.get(row['event_id'], 0)
+            key = (row['event_id'], row['ip'])  # use both event_id and ip
+            row['event_count'] = event_counts.get(key, 0)
             enriched_data.append(row)
 
         return Response(enriched_data)
@@ -148,7 +167,71 @@ class CoverageIndicatorView(APIView):
             })
 
         return Response(data)
+    
 
+
+class EventCoverageView(APIView):
+    """
+    Returns pie chart data per event_id
+    """
+    def get(self, request):
+        try:
+            all_events = Coverage.objects.values_list("event_id", flat=True).distinct()
+            response_data = []
+
+            # Compute hit counts from dynamic models
+            event_counts = {}
+            for model_name, model in dynamic_models.items():
+                model_fields = [f.name for f in model._meta.fields]
+                eid_field = "eventid" if "eventid" in model_fields else "event_id"
+                ip_field = "ip" if "ip" in model_fields else None
+
+                if not ip_field:
+                    continue
+
+                for obj in model.objects.values(eid_field, ip_field):
+                    eid = obj.get(eid_field)
+                    ip = obj.get(ip_field)
+                    if eid and ip:
+                        key = (eid, ip)
+                        event_counts[key] = event_counts.get(key, 0) + 1
+
+            # Build response per event_id
+            for event_id in all_events:
+                coverages = Coverage.objects.filter(event_id=event_id)
+                if not coverages.exists():
+                    continue
+
+                ips_data = []
+                total_hit = 0
+                total_threshold = 0
+
+                for cov in coverages:
+                    ip = cov.ip
+                    threshold = getattr(cov, "threshold", 1)
+                    hit = event_counts.get((event_id, ip), 0)  # use dynamic model counts
+
+                    total_hit += hit
+                    total_threshold += threshold
+
+                    ips_data.append({
+                        "ip": ip,
+                        "hit": hit,
+                        "threshold": threshold
+                    })
+
+                response_data.append({
+                    "event_id": event_id,
+                    "total_hit": total_hit,
+                    "total_threshold": total_threshold,
+                    "ips": ips_data
+                })
+
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 

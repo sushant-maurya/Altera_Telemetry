@@ -37,12 +37,14 @@ class ToolBase(models.Model):
     step_description = models.TextField()
     step_result = models.CharField(max_length=100)
 
+    ip = models.CharField(max_length=200)
+
     class Meta:
         abstract = True
 
 
 # Tools list
-available_tool = ['Nanoscope']
+available_tool = ['nanoscope']
 
 dynamic_models = {}
 

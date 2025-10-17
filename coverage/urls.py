@@ -1,6 +1,6 @@
 from django.urls import path ,include
 from rest_framework.routers import DefaultRouter
-from .views import CoverageViewSet , CoverageMappingList, CoverageMappingBulkUpload ,CoverageIndicatorView,UniqueIPView
+from .views import CoverageViewSet , CoverageMappingList, CoverageMappingBulkUpload ,CoverageIndicatorView,UniqueIPView ,EventCoverageView
 from .downloadupload import CoverageTemplateDownload ,CoverageBulkUpload 
 
 
@@ -16,6 +16,7 @@ urlpatterns = [
     path('coverage-mapping/bulk-upload/', CoverageMappingBulkUpload.as_view(), name='coverage-mapping-bulk-upload'),
     path("unique-ip/", UniqueIPView.as_view(), name="unique-ip"),
     path("indicator/", CoverageIndicatorView.as_view(), name="coverage-indicator"),
+    path("coverage-event/", EventCoverageView.as_view(), name="event-coverage"),
     path('' ,include(router.urls)),
     
 ]
